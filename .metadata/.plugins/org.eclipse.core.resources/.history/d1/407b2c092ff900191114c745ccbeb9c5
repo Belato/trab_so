@@ -1,0 +1,265 @@
+package implementation;
+
+import java.io.*;
+import java.util.ArrayList;
+import java.util.List;
+
+import structures.Stack;
+import GUI.controllers.Simulator;
+
+class MemoryManager {
+
+	// Attributes
+
+	private Frame[] mainMemory; // Memory organized in frames.
+	private List<Integer> freeFramesList;
+	private Stack referenceStack; // referenceStack for LRU replacement policy.
+	private File secondaryMemory;
+	private Object a;
+
+	private int frameSize, smCapacity, logicalAddressSize, pageSelectionBitsQt, offsetSize, replacementPolicy;
+
+	MemoryManager(int mainMemorySize, int secondaryMemorySize, int frameSize, int logicalAddressSize,
+			int replacementPolicy) {
+		(File) a = new File('disk')
+		this.logicalAddressSize = logicalAddressSize;
+		this.frameSize = frameSize;
+		smCapacity = secondaryMemorySize / frameSize;
+		this.offsetSize = log2(frameSize);
+		this.replacementPolicy = replacementPolicy;
+		pageSelectionBitsQt = logicalAddressSize - offsetSize;
+
+		int framesQt = mainMemorySize / frameSize;
+
+		mainMemory = new Frame[framesQt];
+		freeFramesList = new ArrayList<>();
+
+		for (int i = 0; i < framesQt; i++) {
+			mainMemory[i] = new Frame();
+			mainMemory[i].setLocation(i);
+			freeFramesList.add(i);
+			Simulator.addFrame(mainMemory[i]);
+		}
+
+		referenceStack = new Stack(frameSize);
+	}
+
+	// Getters
+
+	int getFrameSize() {
+		return frameSize;
+	}
+
+	int getSecondaryMemorySize() {
+		return smCapacity;
+	}
+
+	int getPageSelectionBitsQt() {
+		return pageSelectionBitsQt;
+	}
+
+	int getOffsetSize() {
+		return offsetSize;
+	}
+
+	public Stack getReferenceStack() {
+		return referenceStack;
+	}
+
+	// Private methods
+
+	private int findFreeFrame() {
+		if (freeFramesList.isEmpty()) {
+			System.out.println("No free frames available.");
+			Main.refreshHistory("No free frames available.");
+			return -1;
+		}
+		int freeFrame = freeFramesList.get(0);
+		freeFramesList.remove(0);
+		return freeFrame;
+	}
+
+	private int log2(int x) {
+		int a = 1;
+		int log = 0;
+		while (a < x) {
+			log++;
+			a = 2 * a;
+		}
+		return log;
+	}
+
+	private String convertIntToBinary(int number, int algarismsQt) {
+		StringBuilder stringBuilder = new StringBuilder();
+		int aux = number, count = algarismsQt;
+		while (aux > 0) {
+			stringBuilder.insert(0, aux % 2);
+			aux /= 2;
+			count--;
+		}
+		while (count > 0) {
+			stringBuilder.insert(0, '0');
+			count--;
+		}
+		return stringBuilder.toString();
+	}
+
+	private int convertBinaryToInt(String bin) {
+		int answer = 0, length = bin.length();
+		for (int ind = 0; ind < length; ind++) {
+			if (bin.charAt(ind) == '1')
+				answer += Math.pow(2, (length - ind - 1));
+		}
+		return answer;
+	}
+
+	private void place(Frame frame) {
+		// ????
+	}
+
+	// Instructions
+
+	void manageMemoryOperation(Process process, int logicalAddress, char mode) {
+		System.out.println(logicalAddress);
+		String binaryAddress = convertIntToBinary(logicalAddress, logicalAddressSize);
+		String pageString = binaryAddress.substring(0, pageSelectionBitsQt);
+		String offsetString = binaryAddress.substring(pageSelectionBitsQt);
+
+		int pageIndex = convertBinaryToInt(pageString);
+		int offset = convertBinaryToInt(offsetString);
+
+		/*
+		 * System.out.format("Logical address, %d bits: (%s) = %d\n",
+		 * logicalAddressSize, binaryAddress, logicalAddress);
+		 * System.out.format("Page index, %d bits: (%s) = %d\n", pageSelectionBitsQt,
+		 * pageString, pageIndex); System.out.format("Offset, %d bits: (%s) = %d\n",
+		 * offsetSize, offsetString, offset);
+		 */
+
+		Main.refreshHistory(
+				"EndereÃ§o lÃ³gico, " + logicalAddressSize + " bits: " + binaryAddress + " = " + logicalAddress);
+		Main.refreshHistory("Ã�ndice da pÃ¡gina, " + pageSelectionBitsQt + " bits: " + pageString + " = " + pageIndex);
+		Main.refreshHistory("Offset, " + offsetSize + " bits: " + offsetString + " = " + offset);
+
+		PageTable pageTable = process.getPageTable();
+
+		if (pageTable.getPagePresenceBit(pageIndex) == 1) {
+			// System.out.println("Page found in main memory.");
+			Main.refreshHistory("PÃ¡gina encontrada em memÃ³ria.");
+			if (mode == 'w') {
+				// System.out.println("Modification bit settled to 1.");
+				Main.refreshHistory("Bit de modificaÃ§Ã£o mudado para 1.");
+				pageTable.setPageModificationBit(pageIndex, 1);
+			}
+			referenceStack.add(pageTable.getPageMemoryLocation(pageIndex));
+			// System.out.println("Reference stack refreshed.");
+			Main.refreshHistory("Pilha de referÃªncia atualizada.");
+			return;
+		}
+		// System.out.println("Page fault.");
+		Main.refreshHistory("Falta de pÃ¡gina.");
+
+		try {
+
+			secondaryMemory = new File("disk");
+			FileInputStream fileInputStream = new FileInputStream(secondaryMemory);
+			ObjectInputStream objectInputStream = new ObjectInputStream(fileInputStream);
+
+			Frame frame = (Frame) objectInputStream.readObject();
+			while (frame != null) {
+				if (frame.getContent().equals(process.getId() + "." + pageIndex))
+					break;
+				frame = (Frame) objectInputStream.readObject();
+			}
+
+			objectInputStream.close();
+			fileInputStream.close();
+
+			frame.setUsed();
+			if (replacementPolicy == 1) {
+				// System.out.println("Replacing according to LRU policy");
+				Main.refreshHistory("Posicionamento de acordo com polÃ­tica LRU.");
+
+				mainMemory[referenceStack.getBase()] = frame;
+
+			}
+
+			pageTable.setPagePresenceBit(pageIndex, 1);
+			pageTable.setPageMemoryLocation(pageIndex, referenceStack.getBase());
+			referenceStack.incrementBase();
+
+		} catch (Exception exc) {
+			exc.printStackTrace();
+		}
+
+	}
+
+	void manageTermination(Process process) {
+
+		PageTable pageTable = process.getPageTable();
+		int pageLocation;
+		List<Integer> referenced = new ArrayList<>();
+
+		for (int pageIndex = 0; pageIndex < process.getPagesQt(); pageIndex++) {
+			if(pageTable.getTableLines().get(pageIndex).getPresenceBit() != 0 ) {
+				pageLocation = pageTable.getPageMemoryLocation(pageIndex);
+				mainMemory[pageLocation].setUnused();
+				mainMemory[pageLocation].setContent("empty");
+				referenced.add(pageLocation);
+			}
+		}
+		referenceStack.removeAll(referenced);
+		freeFramesList.addAll(referenced);
+	}
+
+	void allocateProcess(Process process) {
+		int page, frame;
+		int count = 0;
+		PageTable pageTable = process.getPageTable();
+		for (page = 0; page < process.getPagesQt(); page++) {
+
+			pageTable.setPageModificationBit(page, 0);
+			
+			try {
+				secondaryMemory = new File("disk");
+				FileOutputStream fileOutputStream = new FileOutputStream(secondaryMemory);
+				ObjectOutputStream objectOutputStream = new ObjectOutputStream(fileOutputStream);
+				
+				
+				Frame frame1 = new Frame();
+				frame1.setContent(process.getId() + "." + page);
+
+				objectOutputStream.writeObject(frame1);
+
+				objectOutputStream.close();
+				fileOutputStream.close();
+
+				pageTable.setPagePresenceBit(page, 0);
+				smCapacity--;
+			} catch (Exception exc) {
+				exc.printStackTrace();
+			}
+			if (count < 20) {
+				frame = findFreeFrame();
+
+				if (frame == -1) {
+					
+				} else {
+
+					pageTable.setPageMemoryLocation(page, frame);
+					pageTable.setPagePresenceBit(page, 1);
+
+					mainMemory[frame].setContent(process.getId() + "." + page);
+					mainMemory[frame].setUsed();
+					referenceStack.add(frame);
+				}
+				count++;
+				System.out.println(referenceStack.search(20));
+			}
+
+			// System.out.println("Page " + page + " placed on frame " + frame + ".");
+			// Main.refreshHistory("Page " + page + " placed on frame " + frame + ".");
+		}
+	}
+
+}

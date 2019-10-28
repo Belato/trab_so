@@ -1,0 +1,25 @@
+package structures;
+
+public class Clock {
+	private int lastReference;
+    private Array<Line> Lines;
+
+    private void used(int lineNumber){
+        Line l = Lines[lineNumber];
+        if(l != null){
+            l.setUsed(1);
+        }
+    }
+
+    private void adc(int lineNumber){
+        Line l = new Line(lineNumber, 1);
+        lastReference = lineNumber;
+        Lines[lineNumber] = l;
+    }
+
+    private int remove()
+
+
+
+
+}

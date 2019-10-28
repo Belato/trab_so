@@ -1,0 +1,15 @@
+public class LRU{
+
+	private void used(int lineNumber) {
+
+	}
+
+	private void adc(int lineNumber) {
+
+	}
+
+	private int remove() {
+        return 0;
+	}
+
+}

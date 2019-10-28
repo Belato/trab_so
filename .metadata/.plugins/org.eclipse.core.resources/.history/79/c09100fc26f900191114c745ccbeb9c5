@@ -1,0 +1,207 @@
+package implementation;
+
+import java.util.*;
+import GUI.controllers.Simulator;
+import structures.Stack;
+
+public class OperatingSystem {
+
+    // Queues
+
+    private List<Process> processesTable, readyProcesses, blockedProcesses, readySuspendProcesses, blockedSuspendProcesses;
+
+    // Others
+
+    private MemoryManager memoryManager;
+    private static Process runningProcess;
+
+    OperatingSystem(int mainMemorySize, int secondaryMemorySize, int framesSize, int logicalAddressSize, int replacementPolicy){
+
+        memoryManager = new MemoryManager((int) (mainMemorySize * Math.pow(2, 20)), secondaryMemorySize, framesSize, logicalAddressSize, replacementPolicy);
+
+        readyProcesses = new ArrayList<>();
+        blockedProcesses = new ArrayList<>();
+        readySuspendProcesses = new ArrayList<>();
+        blockedSuspendProcesses = new ArrayList<>();
+        processesTable = new ArrayList<>();
+
+        runningProcess = null;
+    }
+
+    public List<Process> getProcessesTable(){ return processesTable; }
+
+    public Stack getReferenceStack(){ return memoryManager.getReferenceStack(); }
+
+    public Process getRunningProcess(){ return runningProcess; }
+
+    // Processes
+
+    private void switchProcessStatus(Process process, String newStatus){
+        switch (process.getStatus()){
+            case "ready":
+                readyProcesses.remove(process);
+                break;
+            case "blocked":
+                blockedProcesses.remove(process);
+                break;
+            case "blocked-suspend":
+                blockedSuspendProcesses.remove(process);
+                break;
+            case "ready-suspend":
+                readySuspendProcesses.remove(process);
+                break;
+        }
+        switch (newStatus){
+            case "ready":
+                readyProcesses.add(process);
+                break;
+            case "blocked":
+                process.setWaitingTimer(-1);
+                blockedProcesses.add(process);
+                break;
+            case "blocked-suspend":
+                blockedSuspendProcesses.add(process);
+                break;
+            case "ready-suspend":
+                readySuspendProcesses.add(process);
+                break;
+            case "running":
+                runningProcess = process;
+                break;
+        }
+        process.setStatus(newStatus);
+    }
+
+    private void createProcess(int id, int size){
+        Process process = new Process(id, size, memoryManager.getFrameSize());
+        memoryManager.allocateProcess(process);
+        System.out.println("Process created.");
+        Main.refreshHistory("Process created.");
+        processesTable.add(process);
+        switchProcessStatus(process, "ready");
+    }
+
+    private void manageBlockedProcesses(){
+        /*
+        I/O events must last for 2 execution cycles.
+        Can't remove items from a list while queueing.
+         */
+    	
+        List<Process> aux = new ArrayList<>();
+        for(Process process : blockedProcesses){
+            process.increaseWaitingTimer();
+            if(process.getTimeBlocked() == 3) {
+                process.setStatus("ready");
+                process.resetWaitingTimer();
+                aux.add(process);
+                readyProcesses.add(process);
+                System.out.println("Process " + process.getId() + " has been released from blocked queue.");
+                Main.refreshHistory("Process " + process.getId() + " has been released from blocked queue.");
+            }
+        }
+        blockedProcesses.removeAll(aux);
+        /*
+        aux.clear();
+        for(Process process : blockedSuspendProcesses){
+            process.increaseWaitingTimer();
+            if(process.getTimeBlocked() == 3) {
+                process.setStatus("ready");
+                process.resetWaitingTimer();
+                aux.add(process);
+                readyProcesses.add(process);
+                System.out.println("Process " + process.getId() + " has been released from blocked-Suspend queue.");
+            }
+        }
+        blockedSuspendProcesses.removeAll(aux);
+         */
+    }
+
+    private void terminateProcess(){
+        memoryManager.manageTermination(runningProcess);
+        processesTable.remove(runningProcess);
+    }
+
+    void executeCommandLine(String commandLine){
+    	System.out.println(commandLine);
+        String[] buffer = commandLine.split(" ");
+        
+        // Process Identification
+        int id = Integer.parseInt(buffer[0].substring(1));
+        System.out.println("\nProcess " + id);
+        Main.refreshHistory("Process " + id);
+
+        if(runningProcess != null && id != runningProcess.getId())
+            switchProcessStatus(runningProcess, "ready");
+
+        boolean found = false;
+        for(Process process : processesTable)
+            if(process.getId() == id){
+                found = true;
+                if(process.isBlocked()){
+                    System.out.println("Can't execute a blocked process.");
+                    Main.refreshHistory("Can't execute a blocked process.");
+                    return;
+                }
+                switchProcessStatus(process, "running");
+                break;
+            }
+
+        // Operation Recognizing
+        if(!found) {// If the process was not found, either it must be created or the command is invalid.
+            if(buffer[1].equals("C")){
+                System.out.println("Process creation required, " + buffer[2] + buffer[3] + " space needed, " +
+                        (int) ((Integer.parseInt(buffer[2]) * Math.pow(2, 20)) / memoryManager.getFrameSize()) + " frames on total.\n");
+
+                Main.refreshHistory("Process creation required, " + buffer[2] + buffer[3] + " space needed, " +
+                        (int) ((Integer.parseInt(buffer[2]) * Math.pow(2, 20)) / memoryManager.getFrameSize()) + " frames on total.");
+
+                createProcess(id, (int) (Integer.parseInt(buffer[2]) * Math.pow(2, 20)));
+                manageBlockedProcesses();
+                return;
+            }
+            else{
+                System.out.println("Can't execute a non-existing process.");
+                Main.refreshHistory("Can't execute a non-existing process.");
+                return;
+            }
+        }
+
+        if(buffer[1].equals("T")){// 2-words command.
+            System.out.println("Process termination.");
+            Main.refreshHistory("Process termination.");
+            terminateProcess();
+            manageBlockedProcesses();
+        }
+        else{// 3-words commands.
+            buffer[2] = buffer[2].substring(1, buffer[2].length()-2);
+            switch (buffer[1]){
+                case "P":
+                    System.out.println("Commom operation, logical address " + buffer[2] + " is being referenced.");
+                    Main.refreshHistory("Commom operation, logical address " + buffer[2] + " is being referenced.");
+                    memoryManager.manageMemoryOperation(runningProcess, Integer.parseInt(buffer[2]), 'p');
+                    break;
+                case "I":
+                    System.out.println("I/O operation required, logical address " + buffer[2] + " is being referenced." +
+                            " Process must be blocked.");
+                    Main.refreshHistory("I/O operation required, logical address " + buffer[2] + " is being referenced." +
+                            " Process must be blocked.");
+                    switchProcessStatus(runningProcess, "blocked");
+                    runningProcess = null;
+                    break;
+                case "R":
+                    System.out.println("Reading operation, logical address " + buffer[2] + " is being referenced.");
+                    Main.refreshHistory("Reading operation, logical address " + buffer[2] + " is being referenced.");
+                    System.out.println(buffer[2]);
+                    memoryManager.manageMemoryOperation(runningProcess, Integer.parseInt(buffer[2]), 'r');
+                    break;
+                case "W":
+                    System.out.println("Writing operation, logical address " + buffer[2] + " is being referenced.");
+                    Main.refreshHistory("Writing operation, logical address " + buffer[2] + " is being referenced.");
+                    memoryManager.manageMemoryOperation(runningProcess, Integer.parseInt(buffer[2]), 'w');
+                    break;
+            }
+            manageBlockedProcesses();
+        }
+    }
+
+}

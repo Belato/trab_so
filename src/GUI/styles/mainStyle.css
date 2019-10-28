@@ -1,0 +1,7 @@
+.label#commandLine_lb{
+    -fx-font-size: 25;
+}
+
+.table-column {
+  -fx-alignment: center;
+}

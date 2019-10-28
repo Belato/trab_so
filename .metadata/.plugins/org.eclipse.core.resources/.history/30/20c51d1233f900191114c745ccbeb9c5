@@ -1,0 +1,35 @@
+package structures;
+
+import java.lang.reflect.Array;
+
+public class Clock {
+	private int lastReference;
+
+	private Line[] Lines;
+	
+    public Clock(int lastReference, int lineQt) {
+		super();
+		this.lastReference = lastReference;
+		Lines = lines;
+	}
+
+
+    private void used(int lineNumber){
+        Line l = Lines[lineNumber];
+        if(l != null){
+            l.setUsed(1);
+        }
+    }
+
+    private void adc(int lineNumber){
+        Line l = new Line(lineNumber, 1);
+        lastReference = lineNumber;
+        Lines[lineNumber] = l;
+    }
+
+    private int remove()
+
+
+
+
+}

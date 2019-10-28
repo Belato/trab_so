@@ -1,0 +1,6 @@
+package structures;
+
+public class Line {
+    private int LineNumber;
+    private int used;
+}
