@@ -1,0 +1,42 @@
+package structures;
+
+import java.util.ArrayList;
+
+public class LRU{
+	private Stack a;
+	private int size;
+	public LRU() {
+		super();
+		this.a = new Stack(size);
+	}
+
+	private void adc(int lineNumber) {
+		int[] pilha = a.getStack();
+		if(a.getTop()==a.getSize()) {
+			remove(0);
+		}
+		for(int i=0; i < a.getSize(); i++) {
+			if(pilha[i] == lineNumber) {
+				remove(i);
+				a.setTop(a.getTop()-1);
+				break;
+			}
+		}
+		pilha[a.getTop()]=lineNumber;
+		a.setStack(pilha);
+		a.setTop(a.getTop()+1);
+	}
+
+	private void remove(int ind) {
+		int i=ind;
+		int[] pilha = a.getStack();
+		for(i=0; i < a.getTop()-1; i++) {
+			pilha[i]=pilha[i+1];
+		}
+		pilha[i]=-1;
+		a.setStack(pilha);
+		a.setTop(a.getTop()-1);
+        return;
+	}
+
+}
